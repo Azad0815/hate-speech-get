@@ -1,0 +1,78 @@
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.impute import SimpleImputer
+from nltk.stem import SnowballStemmer
+import re
+import nltk
+import string
+from nltk.corpus import stopwords
+
+# Download stopwords if not already downloaded
+nltk.download('stopwords')
+
+# Load your dataset
+data = pd.read_csv("test_tweets.csv")
+
+# Feature engineering
+data["labels"] = data["id"].map({0: "Hate Speech", 1: "Offensive Language", 2: "No Hate and Offensive"})
+data = data[["tweet", "labels"]]
+
+# Text preprocessing
+stemmer = SnowballStemmer("english")
+stopword = set(stopwords.words('english'))
+
+def clean(text):
+    text = str(text).lower()
+    text = re.sub('\[.*?\]', '', text)
+    text = re.sub('https?://\S+|www\.\S+', '', text)
+    text = re.sub('<.*?>+', '', text)
+    text = re.sub('[%s]' % re.escape(string.punctuation), '', text)
+    text = re.sub('\n', '', text)
+    text = re.sub('\w*\d\w*', '', text)
+    words = [word for word in text.split(' ') if word not in stopword]
+    stemmed_words = [stemmer.stem(word) for word in words]
+    cleaned_text = " ".join(stemmed_words)
+    return cleaned_text
+
+data["tweet"] = data["tweet"].apply(clean)
+
+# Feature extraction
+x = np.array(data["tweet"])
+y = np.array(data["labels"])
+cv = CountVectorizer()
+X = cv.fit_transform(x)  # Fit the Data
+
+# Handling NaN values in the feature matrix
+imputer = SimpleImputer(strategy='mean')
+X = imputer.fit_transform(X)
+
+# Handling NaN values in the target variable
+y = data["labels"].fillna("No Hate and Offensive")  # Replace NaN with a default value
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+
+# Model training
+clf = DecisionTreeClassifier()
+clf.fit(X_train, y_train)
+
+# Model evaluation (print or display relevant metrics)
+# ...
+
+# Streamlit app
+import streamlit as st
+
+def hate_speech_detection():
+    st.title("Hate Speech Detection")
+    user = st.text_area("Enter any Tweet: ")
+    if len(user) > 0:
+        sample = user
+        data = cv.transform([sample]).toarray()
+        prediction = clf.predict(data)
+        st.title(f"Predicted Label: {prediction}")
+
+# Run Streamlit app
+hate_speech_detection()
