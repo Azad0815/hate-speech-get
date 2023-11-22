@@ -1,1 +1,1 @@
-# hate-speech-get
+# hate-speech-det
