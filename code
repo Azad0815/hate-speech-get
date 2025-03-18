@@ -1,56 +1,53 @@
 import pandas as pd
 import numpy as np
+import re
+import string
+import nltk
+import streamlit as st
+from nltk.corpus import stopwords
+from nltk.stem import SnowballStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.impute import SimpleImputer
-from nltk.stem import SnowballStemmer
-import re
-import nltk
-import string
-from nltk.corpus import stopwords
 
-# Download stopwords if not already downloaded
+# Download stopwords
 nltk.download('stopwords')
 
-# Load your dataset
+# Load dataset
 data = pd.read_csv("test_tweets_anuFYb8.csv")
 
-# Feature engineering
-data["labels"] = data["id"].map({0: "Hate Speech", 1: "Offensive Language", 2: "No Hate and Offensive"})
-data = data[["tweet", "labels"]]
+# Ensure correct label mapping (modify as needed)
+label_mapping = {0: "Hate Speech", 1: "Offensive Language", 2: "No Hate and Offensive"}
+if "id" in data.columns:  # Adjust if labels are in another column
+    data["labels"] = data["id"].map(label_mapping)
+data = data[["tweet", "labels"]].dropna()  # Remove rows with missing labels
 
-# Text preprocessing
+# Initialize text processing tools
 stemmer = SnowballStemmer("english")
-stopword = set(stopwords.words('english'))
+stopword_set = set(stopwords.words("english"))
 
-def clean(text):
-    text = str(text).lower()
-    text = re.sub('\[.*?\]', '', text)
-    text = re.sub('https?://\S+|www\.\S+', '', text)
-    text = re.sub('<.*?>+', '', text)
-    text = re.sub('[%s]' % re.escape(string.punctuation), '', text)
-    text = re.sub('\n', '', text)
-    text = re.sub('\w*\d\w*', '', text)
-    words = [word for word in text.split(' ') if word not in stopword]
-    stemmed_words = [stemmer.stem(word) for word in words]
-    cleaned_text = " ".join(stemmed_words)
-    return cleaned_text
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    text = re.sub(r'<.*?>+', '', text)
+    text = re.sub(r'[%s]' % re.escape(string.punctuation), '', text)
+    text = re.sub(r'\n', '', text)
+    text = re.sub(r'\w*\d\w*', '', text)
+    
+    words = text.split()
+    words = [stemmer.stem(word) for word in words if word not in stopword_set]
+    return " ".join(words)
 
-data["tweet"] = data["tweet"].apply(clean)
+# Apply text cleaning
+data["tweet"] = data["tweet"].apply(clean_text)
 
 # Feature extraction
-x = np.array(data["tweet"])
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(data["tweet"])
+
+# Prepare labels
 y = np.array(data["labels"])
-cv = CountVectorizer()
-X = cv.fit_transform(x)  # Fit the Data
-
-# Handling NaN values in the feature matrix
-imputer = SimpleImputer(strategy='mean')
-X = imputer.fit_transform(X)
-
-# Handling NaN values in the target variable
-y = data["labels"].fillna("No Hate and Offensive")  # Replace NaN with a default value
 
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
@@ -59,20 +56,16 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random
 clf = DecisionTreeClassifier()
 clf.fit(X_train, y_train)
 
-# Model evaluation (print or display relevant metrics)
-# ...
-
-# Streamlit app
-import streamlit as st
-
+# Streamlit app function
 def hate_speech_detection():
-    st.title("Hate Speech Detection")
-    user = st.text_area("Enter any Tweet: ")
-    if len(user) > 0:
-        sample = user
-        data = cv.transform([sample]).toarray()
-        prediction = clf.predict(data)
-        st.title(f"Predicted Label: {prediction}")
+    st.title("🛑 Hate Speech Detection")
+    user_input = st.text_area("Enter a Tweet to analyze:")
+    
+    if user_input:
+        transformed_input = vectorizer.transform([clean_text(user_input)])
+        prediction = clf.predict(transformed_input)[0]
+        st.success(f"Predicted Label: **{prediction}**")
 
 # Run Streamlit app
-hate_speech_detection()
+if __name__ == "__main__":
+    hate_speech_detection()
